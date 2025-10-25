@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Multi-Account Dashboard V4.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        * { -webkit-tap-highlight-color: transparent; }
+        .detail-row { display: none; }
+        .detail-row.show { display: table-row; animation: slideDown 0.3s; }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .period-card { cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden; }
+        .period-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            pointer-events: none;
+        }
+        .period-card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.8);
+        }
+        .modal.show { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .modal-content {
+            background-color: #1e293b;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 12px;
+            width: 95%;
+            max-width: 1200px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .close-btn {
+            color: #94a3b8;
+            float: right;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 20px;
+        }
+        .close-btn:hover { color: #fff; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+    <div class="container mx-auto p-2 sm:p-4 md:p-6 max-w-7xl">
+        
+        <div class="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg shadow-xl p-3 sm:p-6 mb-4 sm:mb-6">
+            <div class="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3">
+                <div>
+                    <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1 sm:mb-2">
+                        📊 Multi-Account Trading Dashboard V4.0
+                    </h1>
+                    <p class="text-slate-300 text-xs sm:text-sm">🐍 Python API • Last Update: <span id="lastUpdate">-</span></p>
+                </div>
+                <button onclick="loadData()" class="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-blue-700 text-sm sm:text-base w-full sm:w-auto">
+                    🔄 รีเฟรช
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-3 sm:p-6 text-white">
+                <h3 class="text-xs sm:text-sm font-medium opacity-90 mb-1">💰 Balance</h3>
+                <p class="text-lg sm:text-2xl md:text-3xl font-bold truncate" id="totalBalance">$0</p>
+                <p class="text-xs opacity-75 mt-1 sm:mt-2" id="accountCount">0 accounts</p>
+            </div>
+            <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg p-3 sm:p-6 text-white">
+                <h3 class="text-xs sm:text-sm font-medium opacity-90 mb-1">📈 Equity</h3>
+                <p class="text-lg sm:text-2xl md:text-3xl font-bold truncate" id="totalEquity">$0</p>
+                <p class="text-xs opacity-75 mt-1 sm:mt-2">Live</p>
+            </div>
+            <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-3 sm:p-6 text-white" id="profitCard">
+                <h3 class="text-xs sm:text-sm font-medium opacity-90 mb-1">💵 Profit</h3>
+                <p class="text-lg sm:text-2xl md:text-3xl font-bold truncate" id="totalProfit">$0</p>
+                <p class="text-xs opacity-75 mt-1 sm:mt-2" id="profitPercent">0%</p>
+            </div>
+            <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg shadow-lg p-3 sm:p-6 text-white">
+                <h3 class="text-xs sm:text-sm font-medium opacity-90 mb-1">📉 Drawdown</h3>
+                <p class="text-lg sm:text-2xl md:text-3xl font-bold" id="avgDrawdown">0%</p>
+                <p class="text-xs opacity-75 mt-1 sm:mt-2">Current</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg shadow-xl p-3 sm:p-6 mb-4 sm:mb-6" id="statsSection" style="display:none;">
+            <h2 class="text-base sm:text-lg md:text-xl font-bold text-white mb-3 sm:mb-4">📊 สถิติโดยรวม</h2>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div class="text-center">
+                    <p class="text-slate-400 text-xs sm:text-sm">Win Rate</p>
+                    <p class="text-xl sm:text-2xl md:text-3xl font-bold text-white" id="winRate">0%</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-slate-400 text-xs sm:text-sm">✅ Profitable</p>
+                    <p class="text-xl sm:text-2xl md:text-3xl font-bold text-green-400" id="profitable">0</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-slate-400 text-xs sm:text-sm">❌ Losing</p>
+                    <p class="text-xl sm:text-2xl md:text-3xl font-bold text-red-400" id="losing">0</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-slate-400 text-xs sm:text-sm">Avg Profit</p>
+                    <p class="text-xl sm:text-2xl md:text-3xl font-bold text-white truncate" id="avgProfit">$0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Period Stats Cards WITH WEEKLY -->
+        <div class="bg-slate-800 rounded-lg shadow-xl p-3 sm:p-6 mb-4 sm:mb-6" id="periodSection" style="display:none;">
+            <h2 class="text-base sm:text-lg md:text-xl font-bold text-white mb-3 sm:mb-4">📅 สถิติตามช่วงเวลา</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <!-- Daily -->
+                <div class="period-card bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 sm:p-6 relative">
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                            <h3 class="text-blue-100 text-sm font-medium">📅 วันนี้</h3>
+                            <span class="text-xs bg-blue-500 bg-opacity-50 px-2 py-1 rounded-full text-white">Today</span>
+                        </div>
+                        <p class="text-white text-2xl sm:text-3xl font-bold mb-2" id="dailyProfit">$0</p>
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-blue-200" id="dailyTrades">0 trades</span>
+                            <span class="font-bold" id="dailyPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Weekly -->
+                <div class="period-card bg-gradient-to-br from-teal-600 to-teal-700 rounded-lg p-4 sm:p-6 relative">
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                            <h3 class="text-teal-100 text-sm font-medium">📆 สัปดาห์นี้</h3>
+                            <span class="text-xs bg-teal-500 bg-opacity-50 px-2 py-1 rounded-full text-white">Week</span>
+                        </div>
+                        <p class="text-white text-2xl sm:text-3xl font-bold mb-2" id="weeklyProfit">$0</p>
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-teal-200" id="weeklyTrades">0 trades</span>
+                            <span class="font-bold" id="weeklyPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Monthly -->
+                <div class="period-card bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 sm:p-6 relative">
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                            <h3 class="text-purple-100 text-sm font-medium">📊 เดือนนี้</h3>
+                            <span class="text-xs bg-purple-500 bg-opacity-50 px-2 py-1 rounded-full text-white">Month</span>
+                        </div>
+                        <p class="text-white text-2xl sm:text-3xl font-bold mb-2" id="monthlyProfit">$0</p>
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-purple-200" id="monthlyTrades">0 trades</span>
+                            <span class="font-bold" id="monthlyPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Yearly -->
+                <div class="period-card bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-4 sm:p-6 relative">
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                            <h3 class="text-orange-100 text-sm font-medium">📈 ปีนี้</h3>
+                            <span class="text-xs bg-orange-500 bg-opacity-50 px-2 py-1 rounded-full text-white">Year</span>
+                        </div>
+                        <p class="text-white text-2xl sm:text-3xl font-bold mb-2" id="yearlyProfit">$0</p>
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-orange-200" id="yearlyTrades">0 trades</span>
+                            <span class="font-bold" id="yearlyPercent">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg shadow-xl p-3 sm:p-4 mb-4">
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="text-white text-xs sm:text-sm font-medium">🔄 Sort by:</span>
+                <button onclick="sortData('account_number', 'asc')" class="sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">🔢 Account</button>
+                <button onclick="sortData('broker', 'asc')" class="sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">🏢 Broker</button>
+                <button onclick="sortData('profit', 'desc')" class="sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">💵 Profit ▼</button>
+                <button onclick="sortData('profit', 'asc')" class="sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">💵 Profit ▲</button>
+                <button onclick="sortData('group_name', 'asc')" class="sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm">📁 Group</button>
+            </div>
+        </div>
+
+        <div id="groupsContainer"></div>
+
+        <div class="mt-4 sm:mt-6 text-center text-slate-400 text-xs sm:text-sm px-2">
+            <p>🐍 Powered by Python Flask API V4.0 • Auto-refresh every 10 seconds</p>
+            <p class="mt-1">💡 คลิกที่แถวบัญชีเพื่อดูสถิติ • 📈 Double-click เพื่อดูกราฟ</p>
+        </div>
+    </div>
+
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeChartModal()">&times;</span>
+            <h2 class="text-2xl font-bold text-white mb-4" id="modalTitle">📈 Account History</h2>
+            
+            <div class="flex gap-2 mb-6">
+                <button onclick="loadChartData(7)" class="chart-period-btn px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-blue-600 text-sm">7 วัน</button>
+                <button onclick="loadChartData(30)" class="chart-period-btn px-4 py-2 rounded-lg bg-blue-600 text-white text-sm">30 วัน</button>
+                <button onclick="loadChartData(90)" class="chart-period-btn px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-blue-600 text-sm">90 วัน</button>
+                <button onclick="loadChartData(365)" class="chart-period-btn px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-blue-600 text-sm">1 ปี</button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-blue-900 rounded-lg p-4 text-center">
+                    <p class="text-blue-200 text-sm mb-1">Total P/L</p>
+                    <p class="text-white text-2xl font-bold" id="chartTotalPL">$0</p>
+                </div>
+                <div class="bg-green-900 rounded-lg p-4 text-center">
+                    <p class="text-green-200 text-sm mb-1">Win Rate</p>
+                    <p class="text-white text-2xl font-bold" id="chartWinRate">0%</p>
+                </div>
+                <div class="bg-purple-900 rounded-lg p-4 text-center">
+                    <p class="text-purple-200 text-sm mb-1">Best Day</p>
+                    <p class="text-white text-2xl font-bold" id="chartBestDay">$0</p>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-slate-800 rounded-lg p-4">
+                    <h3 class="text-white font-bold mb-3">💰 Balance & Equity</h3>
+                    <canvas id="balanceChart"></canvas>
+                </div>
+                <div class="bg-slate-800 rounded-lg p-4">
+                    <h3 class="text-white font-bold mb-3">📊 Daily P/L</h3>
+                    <canvas id="dailyPLChart"></canvas>
+                </div>
+                <div class="bg-slate-800 rounded-lg p-4">
+                    <h3 class="text-white font-bold mb-3">📈 Cumulative P/L</h3>
+                    <canvas id="cumulativeChart"></canvas>
+                </div>
+            </div>
+
+            <div id="noChartData" class="text-center py-12 text-slate-400" style="display:none;">
+                <p class="text-xl mb-2">📊 ไม่มีข้อมูลประวัติ</p>
+                <p>ระบบจะเริ่มเก็บข้อมูลตั้งแต่วันนี้เป็นต้นไป</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSort = 'account_number';
+        let currentOrder = 'asc';
+        let currentChartAccount = null;
+        let currentChartPeriod = 30;
+        let balanceChart, dailyPLChart, cumulativeChart;
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(value);
+        }
+
+        function formatCurrencyShort(value) {
+            if (Math.abs(value) >= 1000000) {
+                return '$' + (value / 1000000).toFixed(2) + 'M';
+            } else if (Math.abs(value) >= 1000) {
+                return '$' + (value / 1000).toFixed(1) + 'K';
+            }
+            return formatCurrency(value);
+        }
+
+        function calculateDrawdown(balance, equity) {
+            if (balance === 0) return 0;
+            return ((balance - equity) / balance * 100).toFixed(2);
+        }
+
+        function getAccountTypeBadge(type) {
+            const isMobile = window.innerWidth < 640;
+            return type === 'USD' ? 
+                '<span class="text-xs bg-blue-600 px-2 py-1 rounded text-white">💵 USD</span>' :
+                '<span class="text-xs bg-orange-600 px-2 py-1 rounded text-white">🪙 Cent</span>';
+        }
+
+        function toggleDetail(accountId, event) {
+            if (event.detail === 2) {
+                openChartModal(accountId);
+                return;
+            }
+
+            const detailRow = document.getElementById('detail-' + accountId);
+            const allDetails = document.querySelectorAll('.detail-row');
+            
+            allDetails.forEach(row => {
+                if (row.id !== 'detail-' + accountId) {
+                    row.classList.remove('show');
+                }
+            });
+            
+            if (detailRow.classList.contains('show')) {
+                detailRow.classList.remove('show');
+            } else {
+                detailRow.classList.add('show');
+            }
+        }
+
+        function openChartModal(accountNumber) {
+            currentChartAccount = accountNumber;
+            currentChartPeriod = 30;
+            document.getElementById('chartModal').classList.add('show');
+            document.getElementById('modalTitle').textContent = `📈 Account ${accountNumber} - History`;
+            loadChartData(30);
+        }
+
+        function closeChartModal() {
+            document.getElementById('chartModal').classList.remove('show');
+            if (balanceChart) balanceChart.destroy();
+            if (dailyPLChart) dailyPLChart.destroy();
+            if (cumulativeChart) cumulativeChart.destroy();
+        }
+
+        async function loadChartData(days) {
+            currentChartPeriod = days;
+            
+            document.querySelectorAll('.chart-period-btn').forEach(btn => {
+                btn.className = 'chart-period-btn px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-blue-600 text-sm';
+            });
+            event.target.className = 'chart-period-btn px-4 py-2 rounded-lg bg-blue-600 text-white text-sm';
+
+            try {
+                const response = await fetch(`/api/account/${currentChartAccount}/history?days=${days}`);
+                const history = await response.json();
+
+                if (history.length === 0) {
+                    document.getElementById('noChartData').style.display = 'block';
+                    document.querySelectorAll('#chartModal canvas').forEach(c => c.style.display = 'none');
+                    return;
+                }
+
+                document.getElementById('noChartData').style.display = 'none';
+                document.querySelectorAll('#chartModal canvas').forEach(c => c.style.display = 'block');
+
+                history.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                const totalPL = history[history.length - 1].yearly_pl || 0;
+                const profitableDays = history.filter(d => d.daily_pl > 0).length;
+                const winRate = (profitableDays / history.length * 100).toFixed(1);
+                const bestDay = Math.max(...history.map(d => d.daily_pl || 0));
+
+                document.getElementById('chartTotalPL').textContent = formatCurrency(totalPL);
+                document.getElementById('chartWinRate').textContent = `${winRate}%`;
+                document.getElementById('chartBestDay').textContent = formatCurrency(bestDay);
+
+                renderCharts(history);
+
+            } catch (error) {
+                console.error('Error loading chart data:', error);
+            }
+        }
+
+        function renderCharts(history) {
+            const dates = history.map(h => h.date);
+            const balances = history.map(h => h.balance);
+            const equities = history.map(h => h.equity);
+            const dailyPLs = history.map(h => h.daily_pl || 0);
+            
+            let cumulative = 0;
+            const cumulativePLs = dailyPLs.map(pl => {
+                cumulative += pl;
+                return cumulative;
+            });
+
+            if (balanceChart) balanceChart.destroy();
+            if (dailyPLChart) dailyPLChart.destroy();
+            if (cumulativeChart) cumulativeChart.destroy();
+
+            const balanceCtx = document.getElementById('balanceChart').getContext('2d');
+            balanceChart = new Chart(balanceCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: 'Balance',
+                            data: balances,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Equity',
+                            data: equities,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#fff' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+
+            const dailyPLCtx = document.getElementById('dailyPLChart').getContext('2d');
+            dailyPLChart = new Chart(dailyPLCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Daily P/L',
+                        data: dailyPLs,
+                        backgroundColor: dailyPLs.map(pl => pl >= 0 ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)'),
+                        borderColor: dailyPLs.map(pl => pl >= 0 ? '#10b981' : '#ef4444'),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#fff' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+
+            const cumulativeCtx = document.getElementById('cumulativeChart').getContext('2d');
+            cumulativeChart = new Chart(cumulativeCtx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Cumulative P/L',
+                        data: cumulativePLs,
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#fff' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+
+        function sortData(sortBy, order) {
+            currentSort = sortBy;
+            currentOrder = order;
+            
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                btn.className = 'sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm bg-slate-700 text-slate-300 hover:bg-slate-600';
+            });
+            event.target.className = 'sort-btn px-2 sm:px-3 py-1 rounded text-xs sm:text-sm bg-blue-600 text-white';
+            
+            loadData();
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch(`/api/accounts?sort=${currentSort}&order=${currentOrder}`);
+                const data = await response.json();
+                
+                const isMobile = window.innerWidth < 640;
+                
+                document.getElementById('totalBalance').textContent = isMobile ? 
+                    formatCurrencyShort(data.total.balance) : formatCurrency(data.total.balance);
+                document.getElementById('totalEquity').textContent = isMobile ? 
+                    formatCurrencyShort(data.total.equity) : formatCurrency(data.total.equity);
+                document.getElementById('totalProfit').textContent = isMobile ? 
+                    formatCurrencyShort(data.total.profit) : formatCurrency(data.total.profit);
+                document.getElementById('accountCount').textContent = `${data.count} accounts`;
+                document.getElementById('profitPercent').textContent = 
+                    `${data.total.balance > 0 ? ((data.total.profit / data.total.balance) * 100).toFixed(2) : 0}%`;
+                document.getElementById('avgDrawdown').textContent = 
+                    `${calculateDrawdown(data.total.balance, data.total.equity)}%`;
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('th-TH');
+
+                const profitCard = document.getElementById('profitCard');
+                if (data.total.profit >= 0) {
+                    profitCard.className = 'bg-gradient-to-br from-green-500 to-green-600 rounded-lg shadow-lg p-3 sm:p-6 text-white';
+                } else {
+                    profitCard.className = 'bg-gradient-to-br from-red-500 to-red-600 rounded-lg shadow-lg p-3 sm:p-6 text-white';
+                }
+
+                const statsResponse = await fetch('/api/stats');
+                const stats = await statsResponse.json();
+                document.getElementById('statsSection').style.display = 'block';
+                document.getElementById('winRate').textContent = `${stats.win_rate}%`;
+                document.getElementById('profitable').textContent = stats.profitable_accounts;
+                document.getElementById('losing').textContent = stats.losing_accounts;
+                document.getElementById('avgProfit').textContent = isMobile ? 
+                    formatCurrencyShort(stats.avg_profit) : formatCurrency(stats.avg_profit);
+
+                if (data.period_stats) {
+                    document.getElementById('periodSection').style.display = 'block';
+                    
+                    const daily = data.period_stats.daily;
+                    document.getElementById('dailyProfit').textContent = daily.profit >= 0 ? 
+                        '+' + formatCurrencyShort(daily.profit) : formatCurrencyShort(daily.profit);
+                    document.getElementById('dailyTrades').textContent = `${daily.trades} trades`;
+                    const dailyPercentEl = document.getElementById('dailyPercent');
+                    dailyPercentEl.textContent = daily.percent >= 0 ? '+' + daily.percent + '%' : daily.percent + '%';
+                    dailyPercentEl.className = daily.percent >= 0 ? 'font-bold text-green-300' : 'font-bold text-red-300';
+                    
+                    // WEEKLY DATA
+                    if (data.period_stats.weekly) {
+                        const weekly = data.period_stats.weekly;
+                        document.getElementById('weeklyProfit').textContent = weekly.profit >= 0 ? 
+                            '+' + formatCurrencyShort(weekly.profit) : formatCurrencyShort(weekly.profit);
+                        document.getElementById('weeklyTrades').textContent = `${weekly.trades} trades`;
+                        const weeklyPercentEl = document.getElementById('weeklyPercent');
+                        weeklyPercentEl.textContent = weekly.percent >= 0 ? '+' + weekly.percent + '%' : weekly.percent + '%';
+                        weeklyPercentEl.className = weekly.percent >= 0 ? 'font-bold text-green-300' : 'font-bold text-red-300';
+                    }
+                    
+                    const monthly = data.period_stats.monthly;
+                    document.getElementById('monthlyProfit').textContent = monthly.profit >= 0 ? 
+                        '+' + formatCurrencyShort(monthly.profit) : formatCurrencyShort(monthly.profit);
+                    document.getElementById('monthlyTrades').textContent = `${monthly.trades} trades`;
+                    const monthlyPercentEl = document.getElementById('monthlyPercent');
+                    monthlyPercentEl.textContent = monthly.percent >= 0 ? '+' + monthly.percent + '%' : monthly.percent + '%';
+                    monthlyPercentEl.className = monthly.percent >= 0 ? 'font-bold text-green-300' : 'font-bold text-red-300';
+                    
+                    const yearly = data.period_stats.yearly;
+                    document.getElementById('yearlyProfit').textContent = yearly.profit >= 0 ? 
+                        '+' + formatCurrencyShort(yearly.profit) : formatCurrencyShort(yearly.profit);
+                    document.getElementById('yearlyTrades').textContent = `${yearly.trades} trades`;
+                    const yearlyPercentEl = document.getElementById('yearlyPercent');
+                    yearlyPercentEl.textContent = yearly.percent >= 0 ? '+' + yearly.percent + '%' : yearly.percent + '%';
+                    yearlyPercentEl.className = yearly.percent >= 0 ? 'font-bold text-green-300' : 'font-bold text-red-300';
+                }
+
+                renderGroups(data.groups, isMobile);
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function renderGroups(groups, isMobile) {
+            const container = document.getElementById('groupsContainer');
+            
+            if (Object.keys(groups).length === 0) {
+                container.innerHTML = `
+                    <div class="bg-slate-800 rounded-lg shadow-xl p-6 text-center text-slate-400">
+                        <p>ยังไม่มีข้อมูลพอร์ต</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            
+            for (const [groupName, groupData] of Object.entries(groups)) {
+                html += `
+                    <div class="bg-slate-800 rounded-lg shadow-xl overflow-hidden mb-4">
+                        <div class="bg-slate-700 p-3 sm:p-4 flex justify-between items-center border-b border-slate-600">
+                            <div class="flex items-center gap-2 sm:gap-3">
+                                <span class="text-lg sm:text-xl">📁</span>
+                                <h3 class="text-white font-bold text-sm sm:text-base">${groupName}</h3>
+                                <span class="text-slate-300 text-xs sm:text-sm">(${groupData.count} account${groupData.count > 1 ? 's' : ''})</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs sm:text-sm text-slate-300">
+                                    ${isMobile ? formatCurrencyShort(groupData.total_balance) : formatCurrency(groupData.total_balance)}
+                                </div>
+                                <div class="text-xs sm:text-sm font-bold ${groupData.total_profit >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                    ${groupData.total_profit >= 0 ? '+' : ''}${isMobile ? formatCurrencyShort(groupData.total_profit) : formatCurrency(groupData.total_profit)}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-slate-700 border-b border-slate-600 hidden md:table-header-group">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Name</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Account</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase">Broker</th>
+                                        <th class="px-4 py-3 text-center text-xs font-medium text-slate-300 uppercase">Type</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-slate-300 uppercase">Balance</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-slate-300 uppercase">Today P/L</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-slate-300 uppercase">Floating P/L</th>
+                                        <th class="px-4 py-3 text-right text-xs font-medium text-slate-300 uppercase">DD%</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-700">
+                `;
+                
+                groupData.accounts.forEach(account => {
+                    html += `
+                        <tr class="hover:bg-slate-700 cursor-pointer transition-colors" onclick="toggleDetail('${account.account_number}', event)">
+                            <td class="px-3 sm:px-4 py-2 sm:py-3">
+                                <div class="text-xs sm:text-sm font-medium text-white truncate max-w-[100px] sm:max-w-none">
+                                    ${account.account_name}
+                                </div>
+                                <div class="text-xs text-slate-400 md:hidden">
+                                    ${account.account_type} • 
+                                    <span class="${account.daily_stats.profit >= 0 ? 'text-blue-400' : 'text-orange-400'}">
+                                        Today: ${account.daily_stats.profit >= 0 ? '+' : ''}${formatCurrencyShort(account.daily_stats.profit)}
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3">
+                                <div class="flex items-center gap-2 sm:gap-3">
+                                    <div class="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xs sm:text-sm">
+                                        ${account.account_number.toString().slice(-2)}
+                                    </div>
+                                    <div class="text-xs sm:text-sm text-slate-300">${account.account_number}</div>
+                                </div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 hidden md:table-cell">
+                                <div class="text-xs sm:text-sm text-slate-300">${account.broker}</div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 text-center hidden md:table-cell">
+                                ${getAccountTypeBadge(account.account_type)}
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 text-right">
+                                <div class="text-xs sm:text-sm font-medium text-white">
+                                    ${isMobile ? formatCurrencyShort(account.balance) : formatCurrency(account.balance)}
+                                </div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 text-right hidden md:table-cell">
+                                <div class="text-xs sm:text-sm font-bold ${account.daily_stats.profit >= 0 ? 'text-blue-400' : 'text-orange-400'}">
+                                    ${account.daily_stats.profit >= 0 ? '+' : ''}${isMobile ? formatCurrencyShort(account.daily_stats.profit) : formatCurrency(account.daily_stats.profit)}
+                                </div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 text-right">
+                                <div class="text-xs sm:text-sm font-bold ${account.profit >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                    ${account.profit >= 0 ? '+' : ''}${isMobile ? formatCurrencyShort(account.profit) : formatCurrency(account.profit)}
+                                </div>
+                            </td>
+                            <td class="px-3 sm:px-4 py-2 sm:py-3 text-right hidden sm:table-cell">
+                                <span class="text-xs px-2 py-1 rounded ${
+                                    parseFloat(calculateDrawdown(account.balance, account.equity)) < 5 ? 'bg-green-900 text-green-300' :
+                                    parseFloat(calculateDrawdown(account.balance, account.equity)) < 10 ? 'bg-yellow-900 text-yellow-300' :
+                                    'bg-red-900 text-red-300'
+                                }">
+                                    ${calculateDrawdown(account.balance, account.equity)}%
+                                </span>
+                            </td>
+                        </tr>
+                        
+                        <tr id="detail-${account.account_number}" class="detail-row bg-slate-900">
+                            <td colspan="8" class="px-3 sm:px-6 py-3 sm:py-6">
+                                <div class="flex justify-between items-center mb-4">
+                                    <div class="text-xs sm:text-sm font-bold text-slate-300">📊 สถิติรายบัญชี - ${account.account_name}</div>
+                                    <button onclick="openChartModal('${account.account_number}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs sm:text-sm">
+                                        📈 ดูกราฟ
+                                    </button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                    <div class="bg-gradient-to-br from-blue-900 to-blue-800 rounded-lg p-3 sm:p-4 border border-blue-700">
+                                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                                            <span class="text-blue-200 text-xs sm:text-sm font-medium">📅 วันนี้</span>
+                                            <span class="text-xs bg-blue-700 px-2 py-1 rounded text-blue-100">Today</span>
+                                        </div>
+                                        <div class="text-xl sm:text-2xl font-bold text-white mb-2">
+                                            ${account.daily_stats.profit >= 0 ? '+' : ''}${formatCurrencyShort(account.daily_stats.profit)}
+                                        </div>
+                                        <div class="flex justify-between items-center text-xs sm:text-sm mb-2">
+                                            <span class="text-blue-300">${account.daily_stats.trades} trades</span>
+                                            <span class="font-bold ${account.daily_stats.percent >= 0 ? 'text-green-300' : 'text-red-300'}">
+                                                ${account.daily_stats.percent >= 0 ? '+' : ''}${account.daily_stats.percent}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-teal-900 to-teal-800 rounded-lg p-3 sm:p-4 border border-teal-700">
+                                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                                            <span class="text-teal-200 text-xs sm:text-sm font-medium">📆 สัปดาห์นี้</span>
+                                            <span class="text-xs bg-teal-700 px-2 py-1 rounded text-teal-100">Week</span>
+                                        </div>
+                                        <div class="text-xl sm:text-2xl font-bold text-white mb-2">
+                                            ${account.weekly_stats ? (account.weekly_stats.profit >= 0 ? '+' : '') + formatCurrencyShort(account.weekly_stats.profit) : '$0'}
+                                        </div>
+                                        <div class="flex justify-between items-center text-xs sm:text-sm mb-2">
+                                            <span class="text-teal-300">${account.weekly_stats ? account.weekly_stats.trades : 0} trades</span>
+                                            <span class="font-bold ${account.weekly_stats && account.weekly_stats.percent >= 0 ? 'text-green-300' : 'text-red-300'}">
+                                                ${account.weekly_stats ? (account.weekly_stats.percent >= 0 ? '+' : '') + account.weekly_stats.percent + '%' : '0%'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-purple-900 to-purple-800 rounded-lg p-3 sm:p-4 border border-purple-700">
+                                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                                            <span class="text-purple-200 text-xs sm:text-sm font-medium">📊 เดือนนี้</span>
+                                            <span class="text-xs bg-purple-700 px-2 py-1 rounded text-purple-100">Month</span>
+                                        </div>
+                                        <div class="text-xl sm:text-2xl font-bold text-white mb-2">
+                                            ${account.monthly_stats.profit >= 0 ? '+' : ''}${formatCurrencyShort(account.monthly_stats.profit)}
+                                        </div>
+                                        <div class="flex justify-between items-center text-xs sm:text-sm mb-2">
+                                            <span class="text-purple-300">${account.monthly_stats.trades} trades</span>
+                                            <span class="font-bold ${account.monthly_stats.percent >= 0 ? 'text-green-300' : 'text-red-300'}">
+                                                ${account.monthly_stats.percent >= 0 ? '+' : ''}${account.monthly_stats.percent}%
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="bg-gradient-to-br from-orange-900 to-orange-800 rounded-lg p-3 sm:p-4 border border-orange-700">
+                                        <div class="flex items-center justify-between mb-2 sm:mb-3">
+                                            <span class="text-orange-200 text-xs sm:text-sm font-medium">📈 ปีนี้</span>
+                                            <span class="text-xs bg-orange-700 px-2 py-1 rounded text-orange-100">Year</span>
+                                        </div>
+                                        <div class="text-xl sm:text-2xl font-bold text-white mb-2">
+                                            ${account.yearly_stats.profit >= 0 ? '+' : ''}${formatCurrencyShort(account.yearly_stats.profit)}
+                                        </div>
+                                        <div class="flex justify-between items-center text-xs sm:text-sm mb-2">
+                                            <span class="text-orange-300">${account.yearly_stats.trades} trades</span>
+                                            <span class="font-bold ${account.yearly_stats.percent >= 0 ? 'text-green-300' : 'text-red-300'}">
+                                                ${account.yearly_stats.percent >= 0 ? '+' : ''}${account.yearly_stats.percent}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('chartModal');
+            if (event.target == modal) {
+                closeChartModal();
+            }
+        }
+
+        loadData();
+        setInterval(loadData, 10000);
+
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(loadData, 250);
+        });
+    </script>
+</body>
+</html>
